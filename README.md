@@ -1,7 +1,13 @@
 ## Getting Started
 
-$ npm install
 Install npm dependencies.
 
+```bash
+$ npm install
+```
+
+Build the distribution file: `dist/vega-wmf-loader.js`.
+
+```bash
 $ npm run build-lib
-Builds the distribution file: `dist/vega-wmf-loader.js`.
+```
