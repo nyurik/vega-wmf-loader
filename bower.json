@@ -1,0 +1,9 @@
+{
+  "name": "vega-wmf-loader",
+  "description": "Wrapper for loading vega with the custom WMF protocols",
+  "main": "index.js",
+  "authors": [
+    "Yuri Astrakhan <yurik@wikimedia.org>"
+  ],
+  "license": "MIT"
+}
