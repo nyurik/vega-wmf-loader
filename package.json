@@ -3,8 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "description": "Wrapper for loading vega with the custom WMF protocols",
+  "scripts": {
+    "build-lib": "node_modules/.bin/browserify src/index.js -o dist/vega-wmf-loader.js"
+  },
+  "dependencies": {
+    "graph-shared": "git+http://git@github.com/nyurik/graph-shared",
+    "url-parse": "^1.1.3"
+  },
   "devDependencies": {
-    "url-parse": "^1.1.3",
-    "graph-shared": "git+http://git@github.com/nyurik/graph-shared"
+    "browserify": "^13.1.0"
   }
 }
