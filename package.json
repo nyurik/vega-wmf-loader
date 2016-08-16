@@ -1,0 +1,10 @@
+{
+  "name": "vega-wmf-loader",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wrapper for loading vega with the custom WMF protocols",
+  "devDependencies": {
+    "url-parse": "^1.1.3",
+    "graph-shared": "git+http://git@github.com/nyurik/graph-shared"
+  }
+}
