@@ -29,6 +29,73 @@ module.exports = function makeValidator(domains, allowSubdomains) {
 'use strict';
 /* global module */
 
+module.exports = parseWikidataValue;
+
+/**
+ * Given a value object as returned from Wikidata Query Service, returns a simplified value
+ * @param {object} value Original object as sent by the Wikidata query service
+ * @param {string} value.type SPARQL data type (literal, uri)
+ * @param {string} value.datatype XMLSchema data type
+ * @param {*} value.value The actual value sent by the Wikidata query service
+ * @param {boolean=} ignoreUnknown if false, will return value.value even if it cannot be recognized
+ * @return {*}
+ */
+function parseWikidataValue(value, ignoreUnknown) {
+    var temp;
+
+    if (!value || !value.type || value.value === undefined) {
+        return undefined;
+    }
+
+    switch (value.type) {
+        case 'literal':
+            switch (value.datatype) {
+                case 'http://www.w3.org/2001/XMLSchema#double':
+                case 'http://www.w3.org/2001/XMLSchema#float':
+                case 'http://www.w3.org/2001/XMLSchema#decimal':
+                case 'http://www.w3.org/2001/XMLSchema#integer':
+                case 'http://www.w3.org/2001/XMLSchema#long':
+                case 'http://www.w3.org/2001/XMLSchema#int':
+                case 'http://www.w3.org/2001/XMLSchema#short':
+                case 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger':
+                case 'http://www.w3.org/2001/XMLSchema#positiveInteger':
+                case 'http://www.w3.org/2001/XMLSchema#unsignedLong':
+                case 'http://www.w3.org/2001/XMLSchema#unsignedInt':
+                case 'http://www.w3.org/2001/XMLSchema#unsignedShort':
+                case 'http://www.w3.org/2001/XMLSchema#nonPositiveInteger':
+                case 'http://www.w3.org/2001/XMLSchema#negativeInteger':
+                    temp = parseFloat(value.value);
+                    if (temp.toString() === value.value) {
+                        // use number only if it is fully round-tripable back to string
+                        // TBD: this might be overcautios, and would cause more problems than solve
+                        return temp;
+                    }
+                    break;
+                case 'http://www.opengis.net/ont/geosparql#wktLiteral':
+                    // Point(-64.2 -36.62)  -- (longitude latitude)
+                    temp = /^Point\(([-0-9.]+) ([-0-9.]+)\)$/.exec(value.value);
+                    if (temp) {
+                        return [parseFloat(temp[1]), parseFloat(temp[2])];
+                    }
+                    break;
+            }
+            break;
+        case 'uri':
+            // "http://www.wikidata.org/entity/Q12345"  ->  "Q12345"
+            temp = /^http:\/\/www\.wikidata\.org\/entity\/(Q[1-9][0-9]*)$/.exec(value.value);
+            if (temp) {
+                return temp[1];
+            }
+            break;
+    }
+    return ignoreUnknown ? undefined : value.value;
+}
+
+
+},{}],3:[function(require,module,exports){
+'use strict';
+/* global module */
+
 var makeValidator = require('domain-validator'),
     parseWikidataValue = require('wd-type-parser');
 
@@ -363,110 +430,7 @@ VegaWrapper.prototype.dataParser = function dataParser(error, data, opt, callbac
     callback(error, data);
 };
 
-},{"domain-validator":1,"wd-type-parser":7}],3:[function(require,module,exports){
-'use strict';
-
-var has = Object.prototype.hasOwnProperty;
-
-/**
- * Simple query string parser.
- *
- * @param {String} query The query string that needs to be parsed.
- * @returns {Object}
- * @api public
- */
-function querystring(query) {
-  var parser = /([^=?&]+)=?([^&]*)/g
-    , result = {}
-    , part;
-
-  //
-  // Little nifty parsing hack, leverage the fact that RegExp.exec increments
-  // the lastIndex property so we can continue executing this loop until we've
-  // parsed all results.
-  //
-  for (;
-    part = parser.exec(query);
-    result[decodeURIComponent(part[1])] = decodeURIComponent(part[2])
-  );
-
-  return result;
-}
-
-/**
- * Transform a query string to an object.
- *
- * @param {Object} obj Object that should be transformed.
- * @param {String} prefix Optional prefix.
- * @returns {String}
- * @api public
- */
-function querystringify(obj, prefix) {
-  prefix = prefix || '';
-
-  var pairs = [];
-
-  //
-  // Optionally prefix with a '?' if needed
-  //
-  if ('string' !== typeof prefix) prefix = '?';
-
-  for (var key in obj) {
-    if (has.call(obj, key)) {
-      pairs.push(encodeURIComponent(key) +'='+ encodeURIComponent(obj[key]));
-    }
-  }
-
-  return pairs.length ? prefix + pairs.join('&') : '';
-}
-
-//
-// Expose the module.
-//
-exports.stringify = querystringify;
-exports.parse = querystring;
-
-},{}],4:[function(require,module,exports){
-'use strict';
-
-/**
- * Check if we're required to add a port number.
- *
- * @see https://url.spec.whatwg.org/#default-port
- * @param {Number|String} port Port number we need to check
- * @param {String} protocol Protocol we need to check against.
- * @returns {Boolean} Is it a default port for the given protocol
- * @api private
- */
-module.exports = function required(port, protocol) {
-  protocol = protocol.split(':')[0];
-  port = +port;
-
-  if (!port) return false;
-
-  switch (protocol) {
-    case 'http':
-    case 'ws':
-    return port !== 80;
-
-    case 'https':
-    case 'wss':
-    return port !== 443;
-
-    case 'ftp':
-    return port !== 21;
-
-    case 'gopher':
-    return port !== 70;
-
-    case 'file':
-    return false;
-  }
-
-  return port !== 0;
-};
-
-},{}],5:[function(require,module,exports){
+},{"domain-validator":1,"wd-type-parser":2}],4:[function(require,module,exports){
 'use strict';
 
 var required = require('requires-port')
@@ -754,7 +718,7 @@ URL.qs = qs;
 
 module.exports = URL;
 
-},{"./lolcation":6,"querystringify":3,"requires-port":4}],6:[function(require,module,exports){
+},{"./lolcation":5,"querystringify":6,"requires-port":7}],5:[function(require,module,exports){
 (function (global){
 'use strict';
 
@@ -811,72 +775,108 @@ module.exports = function lolcation(loc) {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./":5}],7:[function(require,module,exports){
+},{"./":4}],6:[function(require,module,exports){
 'use strict';
-/* global module */
 
-module.exports = parseWikidataValue;
+var has = Object.prototype.hasOwnProperty;
 
 /**
- * Given a value object as returned from Wikidata Query Service, returns a simplified value
- * @param {object} value Original object as sent by the Wikidata query service
- * @param {string} value.type SPARQL data type (literal, uri)
- * @param {string} value.datatype XMLSchema data type
- * @param {*} value.value The actual value sent by the Wikidata query service
- * @param {boolean=} ignoreUnknown if false, will return value.value even if it cannot be recognized
- * @return {*}
+ * Simple query string parser.
+ *
+ * @param {String} query The query string that needs to be parsed.
+ * @returns {Object}
+ * @api public
  */
-function parseWikidataValue(value, ignoreUnknown) {
-    var temp;
+function querystring(query) {
+  var parser = /([^=?&]+)=?([^&]*)/g
+    , result = {}
+    , part;
 
-    if (!value || !value.type || value.value === undefined) {
-        return undefined;
-    }
+  //
+  // Little nifty parsing hack, leverage the fact that RegExp.exec increments
+  // the lastIndex property so we can continue executing this loop until we've
+  // parsed all results.
+  //
+  for (;
+    part = parser.exec(query);
+    result[decodeURIComponent(part[1])] = decodeURIComponent(part[2])
+  );
 
-    switch (value.type) {
-        case 'literal':
-            switch (value.datatype) {
-                case 'http://www.w3.org/2001/XMLSchema#double':
-                case 'http://www.w3.org/2001/XMLSchema#float':
-                case 'http://www.w3.org/2001/XMLSchema#decimal':
-                case 'http://www.w3.org/2001/XMLSchema#integer':
-                case 'http://www.w3.org/2001/XMLSchema#long':
-                case 'http://www.w3.org/2001/XMLSchema#int':
-                case 'http://www.w3.org/2001/XMLSchema#short':
-                case 'http://www.w3.org/2001/XMLSchema#nonNegativeInteger':
-                case 'http://www.w3.org/2001/XMLSchema#positiveInteger':
-                case 'http://www.w3.org/2001/XMLSchema#unsignedLong':
-                case 'http://www.w3.org/2001/XMLSchema#unsignedInt':
-                case 'http://www.w3.org/2001/XMLSchema#unsignedShort':
-                case 'http://www.w3.org/2001/XMLSchema#nonPositiveInteger':
-                case 'http://www.w3.org/2001/XMLSchema#negativeInteger':
-                    temp = parseFloat(value.value);
-                    if (temp.toString() === value.value) {
-                        // use number only if it is fully round-tripable back to string
-                        // TBD: this might be overcautios, and would cause more problems than solve
-                        return temp;
-                    }
-                    break;
-                case 'http://www.opengis.net/ont/geosparql#wktLiteral':
-                    // Point(-64.2 -36.62)  -- (longitude latitude)
-                    temp = /^Point\(([-0-9.]+) ([-0-9.]+)\)$/.exec(value.value);
-                    if (temp) {
-                        return [parseFloat(temp[1]), parseFloat(temp[2])];
-                    }
-                    break;
-            }
-            break;
-        case 'uri':
-            // "http://www.wikidata.org/entity/Q12345"  ->  "Q12345"
-            temp = /^http:\/\/www\.wikidata\.org\/entity\/(Q[1-9][0-9]*)$/.exec(value.value);
-            if (temp) {
-                return temp[1];
-            }
-            break;
-    }
-    return ignoreUnknown ? undefined : value.value;
+  return result;
 }
 
+/**
+ * Transform a query string to an object.
+ *
+ * @param {Object} obj Object that should be transformed.
+ * @param {String} prefix Optional prefix.
+ * @returns {String}
+ * @api public
+ */
+function querystringify(obj, prefix) {
+  prefix = prefix || '';
+
+  var pairs = [];
+
+  //
+  // Optionally prefix with a '?' if needed
+  //
+  if ('string' !== typeof prefix) prefix = '?';
+
+  for (var key in obj) {
+    if (has.call(obj, key)) {
+      pairs.push(encodeURIComponent(key) +'='+ encodeURIComponent(obj[key]));
+    }
+  }
+
+  return pairs.length ? prefix + pairs.join('&') : '';
+}
+
+//
+// Expose the module.
+//
+exports.stringify = querystringify;
+exports.parse = querystring;
+
+},{}],7:[function(require,module,exports){
+'use strict';
+
+/**
+ * Check if we're required to add a port number.
+ *
+ * @see https://url.spec.whatwg.org/#default-port
+ * @param {Number|String} port Port number we need to check
+ * @param {String} protocol Protocol we need to check against.
+ * @returns {Boolean} Is it a default port for the given protocol
+ * @api private
+ */
+module.exports = function required(port, protocol) {
+  protocol = protocol.split(':')[0];
+  port = +port;
+
+  if (!port) return false;
+
+  switch (protocol) {
+    case 'http':
+    case 'ws':
+    return port !== 80;
+
+    case 'https':
+    case 'wss':
+    return port !== 443;
+
+    case 'ftp':
+    return port !== 21;
+
+    case 'gopher':
+    return port !== 70;
+
+    case 'file':
+    return false;
+  }
+
+  return port !== 0;
+};
 
 },{}],8:[function(require,module,exports){
 ( function ( $, vg ) {
@@ -933,13 +933,12 @@ function parseWikidataValue(value, ignoreUnknown) {
 			if ( /^[a-z]+:\/\/\//.test( opt.url ) ) {
 				uri.isRelativeHost = true;
 			}
+			if (uri.protocol && uri.protocol[uri.protocol.length - 1] === ':') {
+				uri.protocol = uri.protocol.substring(0, uri.protocol.length - 1);
+			}
 			return uri;
 		}, function ( uri, opt ) {
 			// Format URL back into a string
-			// Revert path into pathname
-			uri.path = uri.pathname;
-			delete uri.pathname;
-
 			if ( location.host.toLowerCase() === uri.host.toLowerCase() ) {
 				// Only send this header when hostname is the same.
 				// This is broader than the same-origin policy,
@@ -957,4 +956,4 @@ function parseWikidataValue(value, ignoreUnknown) {
 
 }( jQuery, vg ) );
 
-},{"graph-shared":2,"url-parse":5}]},{},[8]);
+},{"graph-shared":3,"url-parse":4}]},{},[8]);
