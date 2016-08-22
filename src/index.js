@@ -52,13 +52,12 @@
 			if ( /^[a-z]+:\/\/\//.test( opt.url ) ) {
 				uri.isRelativeHost = true;
 			}
+			if (uri.protocol && uri.protocol[uri.protocol.length - 1] === ':') {
+				uri.protocol = uri.protocol.substring(0, uri.protocol.length - 1);
+			}
 			return uri;
 		}, function ( uri, opt ) {
 			// Format URL back into a string
-			// Revert path into pathname
-			uri.path = uri.pathname;
-			delete uri.pathname;
-
 			if ( location.host.toLowerCase() === uri.host.toLowerCase() ) {
 				// Only send this header when hostname is the same.
 				// This is broader than the same-origin policy,
