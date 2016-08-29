@@ -103,29 +103,31 @@ module.exports = VegaWrapper;
 
 /**
  * Shared library to wrap around vega code
- * @param {Object} load Vega loader object to use and override
+ * @param {Object} datalib Vega's datalib object
+ * @param {Object} datalib.load Vega's data loader
+ * @param {Function} datalib.load.loader Vega's data loader function
+ * @param {Function} datalib.extend similar to jquery's extend()
  * @param {boolean} useXhr true if we should use XHR, false for node.js http loading
  * @param {boolean} isTrusted true if the graph spec can be trusted
  * @param {Object} domains allowed protocols and a list of their domains
  * @param {Object} domainMap domain remapping
  * @param {Function} logger
- * @param {Function} objExtender $.extend in browser, _.extend in NodeJs
  * @param {Function} parseUrl
  * @param {Function} formatUrl
  * @constructor
  */
-function VegaWrapper(load, useXhr, isTrusted, domains, domainMap, logger, objExtender, parseUrl, formatUrl) {
+function VegaWrapper(datalib, useXhr, isTrusted, domains, domainMap, logger, parseUrl, formatUrl) {
     var self = this;
     self.isTrusted = isTrusted;
     self.domains = domains;
     self.domainMap = domainMap;
     self.logger = logger;
-    self.objExtender = objExtender;
+    self.objExtender = datalib.extend;
     self.parseUrl = parseUrl;
     self.formatUrl = formatUrl;
     self.validators = {};
 
-    load.loader = function (opt, callback) {
+    datalib.load.loader = function (opt, callback) {
         var error = callback || function (e) { throw e; }, url;
 
         try {
@@ -141,20 +143,20 @@ function VegaWrapper(load, useXhr, isTrusted, domains, domainMap, logger, objExt
         };
 
         if (useXhr) {
-            return load.xhr(url, opt, cb);
+            return datalib.load.xhr(url, opt, cb);
         } else {
-            return load.http(url, opt, cb);
+            return datalib.load.http(url, opt, cb);
         }
     };
 
-    load.sanitizeUrl = self.sanitizeUrl.bind(self);
+    datalib.load.sanitizeUrl = self.sanitizeUrl.bind(self);
 
     // Prevent accidental use
-    load.file = function() { throw new Error('Disabled'); };
+    datalib.load.file = function() { throw new Error('Disabled'); };
     if (useXhr) {
-        load.http = load.file;
+        datalib.load.http = datalib.load.file;
     } else {
-        load.xhr = load.file;
+        datalib.load.xhr = datalib.load.file;
     }
 }
 
@@ -167,10 +169,10 @@ VegaWrapper.prototype.sanitizeHost = function sanitizeHost(host) {
     // First, map the host
     host = (this.domainMap && this.domainMap[host]) || host;
 
-    if (this.testHost('https', host)) {
-        return {host: host, protocol: 'https'};
-    } else if (this.testHost('http', host)) {
-        return {host: host, protocol: 'http'};
+    if (this.testHost('https:', host)) {
+        return {host: host, protocol: 'https:'};
+    } else if (this.testHost('http:', host)) {
+        return {host: host, protocol: 'http:'};
     }
     return undefined;
 };
@@ -183,13 +185,27 @@ VegaWrapper.prototype.sanitizeHost = function sanitizeHost(host) {
  */
 VegaWrapper.prototype.testHost = function testHost(protocol, host) {
     if (!this.validators[protocol]) {
-        if (this.domains[protocol]) {
-            this.validators[protocol] = makeValidator(this.domains[protocol], protocol === 'https' || protocol === 'http');
+        var domains = this._getProtocolDomains(protocol);
+        if (domains) {
+            this.validators[protocol] = makeValidator(domains, protocol === 'https:' || protocol === 'http:');
         } else {
             return false;
         }
     }
     return this.validators[protocol].test(host);
+};
+
+/**
+ * Gets allowed domains for a given protocol.  Assumes protocol ends with a ':'.
+ * Handles if this.domains's keys do not end in the ':'.
+ * @param {string} protocol
+ * @return {[]|false}
+ * @private
+ */
+VegaWrapper.prototype._getProtocolDomains = function _getProtocolDomains(protocol) {
+    return this.domains[protocol] ||
+        (protocol && protocol.length && protocol[protocol.length - 1] === ':'
+        && this.domains[protocol.substring(0, protocol.length - 1)]);
 };
 
 /**this
@@ -226,8 +242,8 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
         decodedPathname = decodeURIComponent(urlParts.pathname).trim();
 
         switch (urlParts.protocol) {
-            case 'http':
-            case 'https':
+            case 'http:':
+            case 'https:':
                 // The default protocol for the open action is wikititle, so if isRelativeProtocol is set,
                 // we treat the whole pathname as title (without the '/' prefix).
                 if (!isRelativeProtocol) {
@@ -240,7 +256,7 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 opt.graphProtocol = 'wikititle';
                 // fall-through
 
-            case 'wikititle':
+            case 'wikititle:':
                 // wikititle:///My_page   or   wikititle://en.wikipedia.org/My_page
                 // open() at this point may only be used to link to a Wiki page, as it may be invoked
                 // without a click, thus potentially causing a privacy issue.
@@ -260,8 +276,8 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
     } else {
 
         switch (urlParts.protocol) {
-            case 'http':
-            case 'https':
+            case 'http:':
+            case 'https:':
                 if (!this.isTrusted) {
                     throw new Error('HTTP and HTTPS protocols are not supported for untrusted graphs.\n' +
                         'Use wikiraw:, wikiapi:, wikirest:, wikirawupload:, and other protocols.\n' +
@@ -270,7 +286,7 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 // keep the original URL
                 break;
 
-            case 'wikiapi':
+            case 'wikiapi:':
                 // wikiapi:///?action=query&list=allpages
                 // Call to api.php - ignores the path parameter, and only uses the query
                 urlParts.query = this.objExtender(urlParts.query, {format: 'json', formatversion: '2'});
@@ -279,7 +295,7 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 opt.addCorsOrigin = true;
                 break;
 
-            case 'wikirest':
+            case 'wikirest:':
                 // wikirest:///api/rest_v1/page/...
                 // Call to RESTbase api - requires the path to start with "/api/"
                 // The /api/... path is safe for GET requests
@@ -291,7 +307,7 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 urlParts.protocol = sanitizedHost.protocol;
                 break;
 
-            case 'wikiraw':
+            case 'wikiraw:':
                 // wikiraw:///MyPage/data
                 // Get raw content of a wiki page, where the path is the title
                 // of the page with an additional leading '/' which gets removed.
@@ -315,7 +331,7 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 opt.addCorsOrigin = true;
                 break;
 
-            case 'wikifile':
+            case 'wikifile:':
                 // wikifile:///Einstein_1921.jpg
                 // Get an image for the graph, e.g. from commons, by using Special:Redirect
                 urlParts.pathname = '/wiki/Special:Redirect/file' + urlParts.pathname;
@@ -323,7 +339,7 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 // keep urlParts.query
                 break;
 
-            case 'wikirawupload':
+            case 'wikirawupload:':
                 // wikirawupload://upload.wikimedia.org/wikipedia/commons/3/3e/Einstein_1921.jpg
                 // Get an image for the graph, e.g. from commons
                 // This tag specifies any content from the uploads.* domain, without query params
@@ -332,7 +348,7 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 // keep urlParts.pathname
                 break;
 
-            case 'wikidatasparql':
+            case 'wikidatasparql:':
                 // wikidatasparql:///?query=<QUERY>
                 // Runs a SPARQL query, converting it to
                 // https://query.wikidata.org/bigdata/namespace/wdq/sparql?format=json&query=...
@@ -340,11 +356,13 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
                 if (!urlParts.query || !urlParts.query.query) {
                     throw new Error('wikidatasparql: missing query parameter in: ' + opt.url);
                 }
-                urlParts.query = {format: 'json', query: urlParts.query.query};
+                // Only keep the "query" parameter
+                urlParts.query = {query: urlParts.query.query};
                 urlParts.pathname = '/bigdata/namespace/wdq/sparql';
+                opt.headers = this.objExtender(opt.headers || {}, { 'Accept': 'application/sparql-results+json' });
                 break;
 
-            case 'geoshape':
+            case 'geoshape:':
                 // geoshape:///?ids=Q16,Q30
                 // Get geo shapes data from OSM database by supplying Wikidata IDs
                 // https://maps.wikimedia.org/shape?ids=Q16,Q30
@@ -365,12 +383,13 @@ VegaWrapper.prototype.sanitizeUrl = function sanitizeUrl(opt) {
 };
 
 VegaWrapper.prototype._validateExternalService = function _validateExternalService(urlParts, sanitizedHost, url) {
-    var protocol = urlParts.protocol;
-    if (!this.domains[protocol]) {
+    var protocol = urlParts.protocol,
+        domains = this._getProtocolDomains(protocol);
+    if (!domains) {
         throw new Error(protocol + ': protocol is disabled: ' + url);
     }
     if (urlParts.isRelativeHost) {
-        urlParts.host = this.domains[protocol][0];
+        urlParts.host = domains[0];
         urlParts.protocol = this.sanitizeHost(urlParts.host).protocol;
     } else {
         urlParts.protocol = sanitizedHost.protocol;
@@ -389,8 +408,8 @@ VegaWrapper.prototype.dataParser = function dataParser(error, data, opt, callbac
         return;
     }
     switch (opt.graphProtocol) {
-        case 'wikiapi':
-        case 'wikiraw':
+        case 'wikiapi:':
+        case 'wikiraw:':
             // This was an API call - check for errors
             data = JSON.parse(data);
             if (data.error) {
@@ -411,7 +430,7 @@ VegaWrapper.prototype.dataParser = function dataParser(error, data, opt, callbac
             }
             break;
 
-        case 'wikidatasparql':
+        case 'wikidatasparql:':
             data = JSON.parse(data);
             if (!data.results || !Array.isArray(data.results.bindings)) {
                 throw new Error('SPARQL query result does not have "results.bindings"');
@@ -889,7 +908,7 @@ module.exports = function required(port, protocol) {
 		urlParse = require( 'url-parse' );
 
 	wrapper = new VegaWrapper(
-		vg.util.load, true,
+		vg.util, true,
 		false,
 		{
 			'https': [
@@ -924,7 +943,7 @@ module.exports = function required(port, protocol) {
 		false,
 		function ( warning ) {
 			console.log( warning );
-		}, $.extend, function ( opt ) {
+		}, function ( opt ) {
 			// Parse URL
 			var uri = urlParse( opt.url, true );
 			// reduce confusion, only keep expected values
@@ -933,9 +952,6 @@ module.exports = function required(port, protocol) {
 			if ( /^[a-z]+:\/\/\//.test( opt.url ) ) {
 				uri.isRelativeHost = true;
 			}
-			if (uri.protocol && uri.protocol[uri.protocol.length - 1] === ':') {
-				uri.protocol = uri.protocol.substring(0, uri.protocol.length - 1);
-			}
 			return uri;
 		}, function ( uri, opt ) {
 			// Format URL back into a string
@@ -943,7 +959,7 @@ module.exports = function required(port, protocol) {
 				// Only send this header when hostname is the same.
 				// This is broader than the same-origin policy,
 				// but playing on the safer side.
-				opt.headers = { 'Treat-as-Untrusted': 1 };
+				opt.headers = vg.util.extend(opt.headers || {}, { 'Treat-as-Untrusted': 1 });
 			} else if ( opt.addCorsOrigin ) {
 				// All CORS api calls require origin parameter.
 				// It would be better to use location.origin,

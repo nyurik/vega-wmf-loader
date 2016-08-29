@@ -8,7 +8,7 @@
 		urlParse = require( 'url-parse' );
 
 	wrapper = new VegaWrapper(
-		vg.util.load, true,
+		vg.util, true,
 		false,
 		{
 			'https': [
@@ -43,7 +43,7 @@
 		false,
 		function ( warning ) {
 			console.log( warning );
-		}, $.extend, function ( opt ) {
+		}, function ( opt ) {
 			// Parse URL
 			var uri = urlParse( opt.url, true );
 			// reduce confusion, only keep expected values
@@ -52,9 +52,6 @@
 			if ( /^[a-z]+:\/\/\//.test( opt.url ) ) {
 				uri.isRelativeHost = true;
 			}
-			if (uri.protocol && uri.protocol[uri.protocol.length - 1] === ':') {
-				uri.protocol = uri.protocol.substring(0, uri.protocol.length - 1);
-			}
 			return uri;
 		}, function ( uri, opt ) {
 			// Format URL back into a string
@@ -62,7 +59,7 @@
 				// Only send this header when hostname is the same.
 				// This is broader than the same-origin policy,
 				// but playing on the safer side.
-				opt.headers = { 'Treat-as-Untrusted': 1 };
+				opt.headers = vg.util.extend(opt.headers || {}, { 'Treat-as-Untrusted': 1 });
 			} else if ( opt.addCorsOrigin ) {
 				// All CORS api calls require origin parameter.
 				// It would be better to use location.origin,
