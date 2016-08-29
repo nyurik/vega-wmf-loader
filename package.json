@@ -1,6 +1,6 @@
 {
   "name": "vega-wmf-loader",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Wrapper for loading vega with the custom WMF protocols",
   "scripts": {
